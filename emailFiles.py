@@ -7,7 +7,7 @@
 import tempfile
 import PIL.Image
 import os.path
-import time
+import collections
 
 """
    No value is necessary, if no value is assigned we use True
@@ -138,18 +138,18 @@ def email_file(inidict, file):
 
 class iniFileFormat(dict):
     """
-    We don't use configparser because it does not accept parameters
-    without right-hand-side values. We want to be able to add
-    parameters such as:
-  
+    We don't use configparser because secionts need to be odered dictionary
+    it does not accept parameters without right-hand-side values. We want
+    to be able to add parameters such as:
+ 
     [cc]
     joe@example.com
     jane@example.com
-  
+ 
     Also, we need to keep track of file names and line numbers.
-  
+ 
     This parser does not implement line continuation.
-  
+ 
     It returns a dictionary such as:
     { 'cc':
              { 'joe@example.com':
@@ -168,16 +168,15 @@ class iniFileFormat(dict):
              }
     }
     """
-  
-    def __init__(self, slurped_list = None, filename = None):
+ 
+    def __init__(self, slurped_list=None, filename=None):
         dict.__init__(self)
-  
         if slurped_list is not None:
             if filename is None:
                 raise ValueError("filename cannot be empty.")
             self.parse(slurped_list, filename)
-  
-  
+ 
+ 
     def __add__(self, other):
         """
         Allows to read configuration from different files and merge them together.
@@ -206,10 +205,8 @@ class iniFileFormat(dict):
                     if x in self[section].keys():
                         t = 'Duplicate value "' + x + '" in section "' + section + '" in files:\n' + self[section][x]['filename'] + '\nand\n' + other[section][x]['filename']
                         raise ValueError(t)
-  
                 sum[section] = copy.deepcopy(self[section])
                 sum[section].update(other[section])
-  
         return sum
   
   
@@ -219,12 +216,10 @@ class iniFileFormat(dict):
   
         if slurped_list is None or type(filename) is not str:
             raise ValueError
-  
         section_pattern = re.compile('^\[(.*)\]$')
   
         for ln, line in slurped_list.items():
             line = line.strip()
-  
             if line.find('#') == 0:
                 continue
             if line.find(';') == 0:
@@ -236,7 +231,7 @@ class iniFileFormat(dict):
             if found:
                 section = found.group(1).lower()
                 if section not in self:
-                    self[section] = {}
+                    self[section] = collections.OrderedDict()
                 continue
   
             if section is None:
@@ -289,7 +284,6 @@ def slurp_files(files, slurped_dict, lock_files):
     """
   
     import os
-    import collections
   
     ini = iniFileFormat()
   
@@ -341,7 +335,6 @@ def fix_size_od_file(dir, img_name):
     new_name = os.path.join(dir, new_name)
     img = PIL.Image.open(img_name)
     if 1080 < max(img.size):
-        print('resizing')
         img.thumbnail((maxside, maxside,))
     img.save(new_name)
     return(new_name)
@@ -352,53 +345,50 @@ def fix_size_od_file(dir, img_name):
 
 def main(args):
     # args needs to be  a python list, containing files, or directories
-  
+ 
     import atexit
-  
+ 
     slurped = dict()
     lock_files = []
-  
+ 
     atexit.register(delete_lock_files, lock_files)
-  
+ 
     # read the files
     inidict = slurp_files(args, slurped, lock_files)
-  
+ 
     # check for required sections
     if 'main' not in inidict or \
        'from' not in inidict['main']:
         raise ValueError('Missing "From" in seciton main')
-  
+ 
     if 'maximum' in inidict['main']:
         maxfiles = int(inidict['main']['maximum']['data'])
     else:
         raise ValueError('Missing "maximum" (maxium number of files to send) in seciton main')
-  
+ 
     recipient = 0
     if 'to'  in inidict: recipient += len(inidict['to'])  
     if 'cc'  in inidict: recipient += len(inidict['cc'])
     if 'bcc' in inidict: recipient += len (inidict['bcc'])
     if recipient < 1:
         raise ValueError('No recipient specified.')
-  
+ 
     if 'files' not in inidict:
         raise ValueError('No files section.')
-  
-  
-  
+ 
+ 
+ 
     list_of_files = list(inidict['files'].keys())
     list_of_files = list_of_files[:maxfiles]
     tempdir = tempfile.TemporaryDirectory()
-  
+ 
     for attchm in list_of_files:
-        print(attchm)
         fixed_size_file = fix_size_od_file(tempdir.name, attchm)
-        email_file(inidict, attchm)
+        email_file(inidict, fixed_size_file)
         fn = (inidict['files'][attchm]['filename'])
         ln = (inidict['files'][attchm]['linenumber'])
         del slurped[fn][ln]
         open(fn, 'wt').writelines(slurped[fn].values())
-        # using sleep to diagnose image sent in wrong order and spam issues
-        time.sleep(5)
 
 
 
