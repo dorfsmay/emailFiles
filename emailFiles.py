@@ -1,8 +1,13 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 #
 # Copyright, Yves Dorfsman, Calgary 2010
 #
+# 
+import tempfile
+import PIL.Image
+import os.path
+import time
 
 """
    No value is necessary, if no value is assigned we use True
@@ -73,7 +78,6 @@ def email_file(inidict, file):
     import email.mime.text
     import email.mime.image
     import email.mime.audio
-    import os.path
   
     fn = os.path.basename(file)
   
@@ -292,13 +296,11 @@ def slurp_files(files, slurped_dict, lock_files):
     for f in files:
         if not os.path.exists(f):
             raise ValueError('Name ' + f + ' is not a file nor a directory.')
-  
         if os.path.isdir(f):
             import glob
             f = os.path.join(f, '*.ini')
             f = glob.glob(f)
             ini += slurp_files(f, slurped_dict, lock_files)
-  
         else:
             # Try to create a unique copy, let the error rise if a the file exists
             lhs = os.path.dirname(f)
@@ -330,6 +332,20 @@ def delete_lock_files(file_list):
     for f in file_list:
         #print('deleteing ', f)
         os.unlink(f)
+
+def fix_size_od_file(dir, img_name):
+    '''Return image with a maximum side of maxside
+    '''
+    maxside = 1080
+    new_name = os.path.split(img_name)[-1]
+    new_name = os.path.join(dir, new_name)
+    img = PIL.Image.open(img_name)
+    if 1080 < max(img.size):
+        print('resizing')
+        img.thumbnail((maxside, maxside,))
+    img.save(new_name)
+    return(new_name)
+
 
 
 
@@ -371,19 +387,23 @@ def main(args):
   
     list_of_files = list(inidict['files'].keys())
     list_of_files = list_of_files[:maxfiles]
+    tempdir = tempfile.TemporaryDirectory()
   
     for attchm in list_of_files:
+        print(attchm)
+        fixed_size_file = fix_size_od_file(tempdir.name, attchm)
         email_file(inidict, attchm)
         fn = (inidict['files'][attchm]['filename'])
         ln = (inidict['files'][attchm]['linenumber'])
         del slurped[fn][ln]
         open(fn, 'wt').writelines(slurped[fn].values())
+        # using sleep to diagnose image sent in wrong order and spam issues
+        time.sleep(5)
 
 
 
 
 import sys
- 
 if __name__ == '__main__':
     if len(sys.argv) >= 2:
       main(sys.argv[1:])
