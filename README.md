@@ -13,11 +13,11 @@ several files, all ini files are read and their content is consolidated.
 
 ### Required sections
 Three sections are required:
-* `\[main\]` which can contain
+* `[main]` which can contain
     * `from`: email address to be set in the FROM field
     * `maximum`: maximum number of files to be sent during each run
-* `\[bcc\]`: a list of email addresses to be use in the BCC field. One address per line
-* `\[files\]`: a list of files to be sent
+* `[bcc]`: a list of email addresses to be use in the BCC field. One address per line
+* `[files]`: a list of files to be sent
 
 Once a file is sent it will removed from the list of files.
 
