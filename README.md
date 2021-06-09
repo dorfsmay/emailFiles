@@ -7,17 +7,20 @@ and reduce their size to a 1080x1080 if they are larger.
 Initial version from 2010.
 
 ## Usage
-This script uses a slightly modified version of ini files. The files need to
-be in the directory where the script is run from. The data can be split in
-several files, all ini files are read and their content is consolidated.
+This script uses a slightly modified version of ini files:
+  * a line with a key but no value (no equal sign) will defaults to a value of True
 
-### Required sections
+The scripts takes files and directory as arguments. Files are assumed to be (modified) ini files, all ini files will be read from arguments that are directories. All ini files content will be merged. If a key is repeated, the value read last will be used, but there is no guarantee on the order the files are read.
+
+### Required keys
+* in `[main]` at least one of `to`, `cc` or `bcc`
+* the section `[files]`, however it can be empty
+
+### Other keys
 Three sections are required:
-* `[main]` which can contain
+* `[main]`
     * `from`: email address to be set in the FROM field
     * `maximum`: maximum number of files to be sent during each run
-* `[bcc]`: a list of email addresses to be use in the BCC field. One address per line
-* `[files]`: a list of files to be sent
 
 Once a file is sent it will removed from the list of files.
 
