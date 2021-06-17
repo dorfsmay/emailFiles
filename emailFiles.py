@@ -8,48 +8,7 @@ import tempfile
 import PIL.Image
 import os.path
 import collections
-
-"""
-   No value is necessary, if no value is assigned we use True
-
-   you can use more than one arguments
-
-   if an argument is a directory, we open all .ini files in that
-   directory (but do not descent further down).
-
-   ini files are merged
-
-   The idea is to have one separated ini file listing the files you
-   want to send, so you don't touch your main ini file.
-
-   section names are converted to lower case
-
-   everything is done in memory (the files are slurped), it technically
-   could require a large amount of memory, but since ini files are
-   typically small, it should not be a problem. This choice has been
-   made not for speed (see next item), but in order to keep the program
-   simple while keeping the integrity of the files.
-
-   After each email is sent, the file which contained the name of the
-   file to be sent, is re-written. If one ini file contains the name
-   of 50 files to be sent, the ini file will be re-written 50 times.
-   I do realise that this is somewhat inefficient, but was done again
-   for the sake of integrity: if this script cashes, the content of
-   the ini files should still be accurate.
-
-   required value:
-   to, cc or bcc: at least one
-   files: the section has to exist, but can be empty (no file to send
-     today)
-
-   At this point, only one file is attached per email.
-
-
-  TO DO:
-   -deal with mail that does not get delivered
-   -setup 'subjectpattern' in main to allow a custom transformation
-    from filename to subject line
-"""
+import copy
 
 
 def myencoder(msg):
@@ -64,39 +23,21 @@ def myencoder(msg):
     msg["Content-Transfer-Encoding"] = "base64"
 
 
-def email_file(inidict, file):
+def email_file(meta_data, msg, file):
     import smtplib
     import mimetypes
     import email.message
     import email.encoders
     import email.mime.base
-    import email.mime.multipart
     import email.mime.text
     import email.mime.image
     import email.mime.audio
 
     fn = os.path.basename(file)
 
-    msg = email.mime.multipart.MIMEMultipart()
-
     # 'blabla_etc.jpeg' --> 'blabla etc'
     dot = fn.rfind(".")
     msg["Subject"] = fn.replace("_", " ")[:dot]
-
-    if "from" in inidict["main"]:
-        msg["From"] = inidict["main"]["from"]["data"]
-
-    send_to_list = []
-    if "to" in inidict:
-        send_to_list.extend(inidict["to"].keys())
-        msg["To"] = ", ".join(inidict["to"].keys())
-
-    if "cc" in inidict:
-        send_to_list.extend(inidict["cc"].keys())
-        msg["Cc"] = ", ".join(inidict["cc"].keys())
-
-    if "bcc" in inidict:
-        send_to_list.extend(inidict["bcc"].keys())
 
     ctype, encoding = mimetypes.guess_type(file)
     if ctype is None or encoding is not None:
@@ -125,9 +66,34 @@ def email_file(inidict, file):
 
     composed = msg.as_string()
 
-    s = smtplib.SMTP("localhost")
-    s.sendmail(inidict["main"]["from"]["data"], send_to_list, composed)
+    smtp_sender = smtplib.SMTP
+    if meta_data["tls"]:
+        smtp_sender = smtplib.SMTP_SSL
+
+    s = smtp_sender(meta_data["smtp_server"], meta_data["smtp_port"])
+    if "user_id" in meta_data:
+        s.login(meta_data["user_id"], meta_data["password"])
+    s.sendmail(meta_data["from"], meta_data["send_to_list"], composed)
     s.quit()
+
+
+def prepare_generic_message(ini_dict):
+    import email.mime.multipart
+
+    msg = email.mime.multipart.MIMEMultipart()
+
+    if "from" in ini_dict["main"]:
+        msg["From"] = ini_dict["main"]["from"]["data"]
+    send_to_list = []
+    if "to" in ini_dict:
+        send_to_list.extend(ini_dict["to"].keys())
+        msg["To"] = ", ".join(ini_dict["to"].keys())
+    if "cc" in ini_dict:
+        send_to_list.extend(ini_dict["cc"].keys())
+        msg["Cc"] = ", ".join(ini_dict["cc"].keys())
+    if "bcc" in ini_dict:
+        send_to_list.extend(ini_dict["bcc"].keys())
+    return msg, send_to_list
 
 
 class iniFileFormat(dict):
@@ -176,8 +142,6 @@ class iniFileFormat(dict):
         You can repeat a section in a different file, but parameter within
         a section cannot be repeated.
         """
-
-        import copy
 
         allsections = list(self.keys()) + list(other.keys())
         # make a set of unique sections accross both objects.
@@ -334,7 +298,7 @@ def delete_lock_files(file_list):
         os.unlink(f)
 
 
-def fix_size_od_file(dir, img_name):
+def fix_size_of_file(dir, img_name):
     """Return image with a maximum side of maxside"""
     maxside = 1080
     new_name = os.path.split(img_name)[-1]
@@ -351,8 +315,54 @@ def fix_size_od_file(dir, img_name):
     return new_name
 
 
+def verify_required_config_parameters(ini_dict):
+    # Throw an exception if missing a required config
+    if "main" not in ini_dict or "from" not in ini_dict["main"]:
+        raise ValueError('Missing "From" in seciton main')
+
+    if "maxfiles" not in ini_dict["main"]:
+        raise ValueError(
+            'Missing "maxfiles" (maxium number of files to send) in seciton main'
+        )
+    recipient = 0
+    if "to" in ini_dict:
+        recipient += len(ini_dict["to"])
+    if "cc" in ini_dict:
+        recipient += len(ini_dict["cc"])
+    if "bcc" in ini_dict:
+        recipient += len(ini_dict["bcc"])
+    if recipient < 1:
+        raise ValueError("No recipient specified.")
+
+    if "files" not in ini_dict:
+        raise ValueError("No files section.")
+
+
+def extract_meta_data(ini_dict):
+    from getpass import getpass
+
+    meta_data = dict()
+    # setup defaults
+    meta_data["smtp_server"] = "localhost"
+    meta_data["smtp_port"] = 587
+    meta_data["tls"] = False
+
+    meta_data["from"] = ini_dict["main"]["from"]["data"]
+    if "smtp_server" in ini_dict["main"]:
+        meta_data["smtp_server"] = ini_dict["main"]["smtp_server"]["data"].strip()
+    if "smtp_port" in ini_dict["main"]:
+        meta_data["smtp_port"] = int(ini_dict["main"]["smtp_port"]["data"].strip())
+    if "tls" in ini_dict["main"]:
+        if init_dict["main"]["tls"]["data"].strip().lower() not in ("0", "false"):
+            meta_data["tls"] = True
+    if "user_id" in ini_dict["main"]:
+        meta_data["user_id"] = ini_dict["main"]["user_id"]["data"].strip()
+        meta_data["password"] = getpass()
+    return meta_data
+
+
 def main(args):
-    # args needs to be  a python list, containing files, or directories
+    # args:  python list, containing files, or directories
 
     import atexit
 
@@ -362,41 +372,26 @@ def main(args):
     atexit.register(delete_lock_files, lock_files)
 
     # read the files
-    inidict = slurp_files(args, slurped, lock_files)
+    ini_dict = slurp_files(args, slurped, lock_files)
 
-    # check for required sections
-    if "main" not in inidict or "from" not in inidict["main"]:
-        raise ValueError('Missing "From" in seciton main')
+    # Will throw an exception if missing a required config
+    # We let it bubble up and die (early termination)
+    verify_required_config_parameters(ini_dict)
+    meta_data = extract_meta_data(ini_dict)
+    maxfiles = int(ini_dict["main"]["maxfiles"]["data"])
 
-    if "maximum" in inidict["main"]:
-        maxfiles = int(inidict["main"]["maximum"]["data"])
-    else:
-        raise ValueError(
-            'Missing "maximum" (maxium number of files to send) in seciton main'
-        )
-
-    recipient = 0
-    if "to" in inidict:
-        recipient += len(inidict["to"])
-    if "cc" in inidict:
-        recipient += len(inidict["cc"])
-    if "bcc" in inidict:
-        recipient += len(inidict["bcc"])
-    if recipient < 1:
-        raise ValueError("No recipient specified.")
-
-    if "files" not in inidict:
-        raise ValueError("No files section.")
-
-    list_of_files = list(inidict["files"].keys())
+    list_of_files = list(ini_dict["files"].keys())
     list_of_files = list_of_files[:maxfiles]
     tempdir = tempfile.TemporaryDirectory()
+    generic_msg, send_to_list = prepare_generic_message(ini_dict)
+    meta_data["send_to_list"] = send_to_list
 
     for attchm in list_of_files:
-        fixed_size_file = fix_size_od_file(tempdir.name, attchm)
-        email_file(inidict, fixed_size_file)
-        fn = inidict["files"][attchm]["filename"]
-        ln = inidict["files"][attchm]["linenumber"]
+        fixed_size_file = fix_size_of_file(tempdir.name, attchm)
+        msg = copy.deepcopy(generic_msg)
+        email_file(meta_data, msg, fixed_size_file)
+        fn = ini_dict["files"][attchm]["filename"]
+        ln = ini_dict["files"][attchm]["linenumber"]
         del slurped[fn][ln]
         open(fn, "wt").writelines(slurped[fn].values())
 
