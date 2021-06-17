@@ -44,6 +44,11 @@ louise@example.com
 
 [bcc]
 tina@example.com
+
+[files]
+/home/bob/photos/sexy_dance_fighting.jpeg
+/home/bob/photos/Weekend_at_Morts.jpeg
+/home/bob/photos/bob_selfie.jpeg
 ```
 
 ## To Do
