@@ -32,6 +32,7 @@ This is just documentation and inaccurate by definition. Check the `verify_requi
 Once a file is sent it is removed from the list of files.
 
 ### Example ini file
+```
 [main]
 from:  Bob and Linda <belchers@example.com>
 maxfiles: 5
@@ -43,6 +44,7 @@ louise@example.com
 
 [bcc]
 tina@example.com
+```
 
 ## To Do
 - only try to reduce  size for images (so script could be used to send pdf, txt files etc...)
