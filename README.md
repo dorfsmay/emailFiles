@@ -52,12 +52,13 @@ tina@example.com
 ```
 
 ## To Do
+- add a log of email/files sent, failures etc...
+- do something with emails that cannot be delivered!
+- look into sending a single message to multiple recipient within a domain
+- pick a license or pub domain + add to repo/script
 - only try to reduce  size for images (so script could be used to send pdf, txt files etc...)
 - make file size a parameter with a sane default
 - test/fix unicode in title
-- pick a license or pub domain + add to repo/script
-- do something with emails that cannot be delivered!
-- look into sending a single message to multiple recipient within a domain
 - setup 'subjectpattern' in main to allow a custom transformation from filename to subject line
 - allow to setup a domain rather than an smtp server, and make an mx lookup to find the server
 - Remove work-around for an old python3 bug ("issue # 11156").
