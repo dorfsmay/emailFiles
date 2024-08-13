@@ -181,7 +181,7 @@ class iniFileFormat(dict):
 
         if slurped_list is None or type(filename) is not str:
             raise ValueError
-        section_pattern = re.compile("^\[(.*)\]$")
+        section_pattern = re.compile(r"^\[(.*)\]$")
 
         for ln, line in slurped_list.items():
             line = line.strip()
